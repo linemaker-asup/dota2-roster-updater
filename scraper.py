@@ -30,6 +30,7 @@ class PlayerEntry:
     cyberscore_name: str
     datdota_name: str
     alt_names: str
+    notes: str
 
 
 def _create_driver() -> webdriver.Chrome:
@@ -91,6 +92,9 @@ def _parse_roster_from_html(html: str) -> list[dict]:
         nick_div = anchor.find("div", class_="nickname")
         nickname = nick_div.get_text(strip=True) if nick_div else ""
 
+        # Check for Stand-In label (div.player-type containing "Stand-In")
+        is_standin = "Stand-In" in anchor.get_text()
+
         if role_text and nickname:
             players.append(
                 {
@@ -98,6 +102,7 @@ def _parse_roster_from_html(html: str) -> list[dict]:
                     "role_num": ROLE_MAP.get(role_text, 0),
                     "nickname": nickname,
                     "player_id": player_id,
+                    "is_standin": is_standin,
                 }
             )
 
@@ -277,12 +282,16 @@ def build_roster_data() -> list[PlayerEntry]:
         if datdota_name != player["nickname"]:
             alt_names = player["nickname"]
 
+        # Build notes (e.g. stand-in status)
+        notes = "Stand-In" if player.get("is_standin", False) else ""
+
         entry = PlayerEntry(
             team=player["team"],
             role=player["role_num"],
             cyberscore_name=player["nickname"],
             datdota_name=datdota_name,
             alt_names=alt_names,
+            notes=notes,
         )
         entries.append(entry)
 

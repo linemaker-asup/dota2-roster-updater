@@ -35,7 +35,7 @@ def update_google_sheet(entries: list[PlayerEntry]) -> None:
     """Update the Google Sheet with roster data.
 
     Replaces all data below the header row with the new roster entries.
-    Expected columns: Team | Role | Player Name (datdota) | Alt. Name(s)
+    Expected columns: Team | Role | Player Name (datdota) | Alt. Name(s) | Notes
 
     Args:
         entries: List of PlayerEntry objects to write to the sheet.
@@ -54,19 +54,21 @@ def update_google_sheet(entries: list[PlayerEntry]) -> None:
     entries_sorted = sorted(entries, key=lambda e: (e.team, e.role))
     rows = []
     for entry in entries_sorted:
-        rows.append([entry.team, entry.role, entry.datdota_name, entry.alt_names])
+        rows.append(
+            [entry.team, entry.role, entry.datdota_name, entry.alt_names, entry.notes]
+        )
 
     # Clear existing data (keep header row)
     existing = worksheet.get_all_values()
     if len(existing) > 1:
         # Clear from row 2 onwards
         end_row = max(len(existing), len(rows) + 1)
-        cell_range = f"A2:D{end_row}"
+        cell_range = f"A2:E{end_row}"
         worksheet.batch_clear([cell_range])
 
     # Write new data starting from row 2
     if rows:
-        cell_range = f"A2:D{len(rows) + 1}"
+        cell_range = f"A2:E{len(rows) + 1}"
         worksheet.update(cell_range, rows)
 
     logger.info("Updated Google Sheet with %d player entries", len(rows))
@@ -77,10 +79,12 @@ def print_roster_table(entries: list[PlayerEntry]) -> None:
     entries_sorted = sorted(entries, key=lambda e: (e.team, e.role))
 
     print(
-        f"{'Team':<20} {'Role':<6} {'Player Name (datdota)':<25} {'Alt. Name(s)':<20}"
+        f"{'Team':<20} {'Role':<6} {'Player Name (datdota)':<25} "
+        f"{'Alt. Name(s)':<20} {'Notes':<15}"
     )
-    print("-" * 75)
+    print("-" * 90)
     for entry in entries_sorted:
         print(
-            f"{entry.team:<20} {entry.role:<6} {entry.datdota_name:<25} {entry.alt_names:<20}"
+            f"{entry.team:<20} {entry.role:<6} {entry.datdota_name:<25} "
+            f"{entry.alt_names:<20} {entry.notes:<15}"
         )
