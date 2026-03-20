@@ -27,9 +27,7 @@ def get_gspread_client() -> gspread.Client:
             "See README.md for instructions."
         )
 
-    credentials = Credentials.from_service_account_file(
-        str(creds_path), scopes=SCOPES
-    )
+    credentials = Credentials.from_service_account_file(str(creds_path), scopes=SCOPES)
     return gspread.authorize(credentials)
 
 
@@ -78,7 +76,9 @@ def print_roster_table(entries: list[PlayerEntry]) -> None:
     """Print the roster data as a formatted table (for testing without Google Sheets)."""
     entries_sorted = sorted(entries, key=lambda e: (e.team, e.role))
 
-    print(f"{'Team':<20} {'Role':<6} {'Player Name (datdota)':<25} {'Alt. Name(s)':<20}")
+    print(
+        f"{'Team':<20} {'Role':<6} {'Player Name (datdota)':<25} {'Alt. Name(s)':<20}"
+    )
     print("-" * 75)
     for entry in entries_sorted:
         print(

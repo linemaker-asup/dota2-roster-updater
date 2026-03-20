@@ -52,9 +52,7 @@ def main() -> None:
         import config
 
         original = config.TEAMS_TO_TRACK.copy()
-        config.TEAMS_TO_TRACK = {
-            k: v for k, v in original.items() if k in args.teams
-        }
+        config.TEAMS_TO_TRACK = {k: v for k, v in original.items() if k in args.teams}
 
     logger.info("Building roster data...")
     entries = build_roster_data()
