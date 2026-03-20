@@ -33,13 +33,49 @@ ROLE_MAP = {
 TEAM_NAME_OVERRIDES = {
     "Team Falcons": "Falcons",
     "Tundra Esports": "Tundra",
+    "Xtreme Gaming": "Xtreme",
+    "Team Yandex": "Yandex",
+    "1WIN Team": "1WIN",
+    "Heroic": "HEROIC",
 }
 
 # Manual overrides for player names that differ between cyberscore.live and datdota.
 # Format: "cyberscore_name": "datdota_name"
 # Only add entries where the names actually differ.
+# Verified against datdota.com team/player pages.
 DATDOTA_NAME_OVERRIDES = {
+    # MOUZ
     "yamich": "Yamich",
+    # Team Liquid
+    "m1CKe": "MiCKe",
+    "Ace \u2660": "Ace",
+    # OG
+    "Yopaj-": "Yopaj",
+    "Nikko": "Force",
+    "TIMS": "Tims",
+    "skem": "Skem",
+    # PARIVISION
+    "No[o]ne-": "Noone",
+    # BetBoom Team
+    "Kataomi": "kataomi",
+    "MieRo": "MieRo'",
+    # Natus Vincere
+    "pma": "Pma",
+    # Aurora Gaming
+    "kaori": "Kaori",
+    "Ws": "Ws`",
+    # Team Spirit
+    "panto": "pantomem",
+    "rue": "Rue",
+    # Tundra
+    "Bzm": "bzm",
+    # Xtreme Gaming
+    "xNova": "Xnova",
+    # Team Yandex
+    "watson": "Watson",
+    "CHIRA_JUNIOR": "CHIRA JUNIOR",
+    # Nigma Galaxy
+    "OmaR": "Omar",
 }
 
 # Google Sheet ID (from the sheet URL)

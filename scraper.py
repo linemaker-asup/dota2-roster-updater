@@ -272,9 +272,9 @@ def build_roster_data() -> list[PlayerEntry]:
     for player in cyberscore_players:
         datdota_name = match_player_to_datdota(player["nickname"], name_lookup)
 
-        # Build alt names: if datdota name differs from cyberscore name, note it
+        # Always record the cyberscore name as an alt name when it differs
         alt_names = ""
-        if datdota_name.lower() != player["nickname"].lower():
+        if datdota_name != player["nickname"]:
             alt_names = player["nickname"]
 
         entry = PlayerEntry(
