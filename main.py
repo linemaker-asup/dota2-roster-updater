@@ -12,7 +12,7 @@ import sys
 
 from config import GOOGLE_SHEET_ID, TEAMS_TO_TRACK
 from scraper import build_roster_data
-from sheets import print_roster_table, update_google_sheet
+from sheets import print_roster_table, update_google_sheet_with_changes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,8 +73,8 @@ def main() -> None:
                 "Set it to your Google Sheet ID before using --update-sheet."
             )
             sys.exit(1)
-        logger.info("Updating Google Sheet...")
-        update_google_sheet(entries)
+        logger.info("Updating Google Sheet (with change tracking)...")
+        update_google_sheet_with_changes(entries)
         logger.info("Google Sheet updated successfully!")
     else:
         logger.info(

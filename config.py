@@ -85,6 +85,9 @@ GOOGLE_SHEET_ID = "1wWeavQ02B6NLqpN6KTCvglIYtpWvnPlrm_3dMDd-GNY"
 # Google Sheet worksheet name (tab name)
 WORKSHEET_NAME = "Sheet1"
 
+# Worksheet name for daily change tracking
+CHANGES_WORKSHEET_NAME = "Daily Changes"
+
 # Path to Google Service Account credentials JSON file
 GOOGLE_CREDENTIALS_PATH = "credentials.json"
 
