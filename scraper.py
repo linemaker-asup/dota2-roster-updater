@@ -14,10 +14,12 @@ from selenium.webdriver.chrome.options import Options
 
 from config import (
     DATDOTA_NAME_OVERRIDES,
+    LIQUIPEDIA_PAGE_NAMES,
     ROLE_MAP,
     TEAM_NAME_OVERRIDES,
     TEAMS_TO_TRACK,
 )
+from liquipedia import build_liquipedia_lookup, get_alt_name, get_standin_notes
 
 logger = logging.getLogger(__name__)
 
@@ -317,31 +319,65 @@ def match_player_to_datdota(
 
 
 def build_roster_data() -> tuple[list[PlayerEntry], set[str]]:
-    """Build the complete roster data by combining cyberscore and datdota data.
+    """Build the complete roster data by combining cyberscore, datdota, and Liquipedia.
+
+    Data sources:
+    - Cyberscore.live: team rosters (who is currently playing)
+    - OpenDota: canonical datdota player names
+    - Liquipedia: alt names and stand-in status
 
     Returns:
         Tuple of (list of PlayerEntry objects, set of successfully scraped team names).
     """
-    # Fetch data from both sources
+    # Fetch data from all sources
     cyberscore_players, scraped_teams = fetch_all_cyberscore_rosters()
     pro_players = fetch_opendota_pro_players()
     name_lookup = build_name_lookup(pro_players)
 
+    # Build Liquipedia lookup for alt names and stand-in status
+    # Only fetch for teams that have a Liquipedia page configured
+    lp_teams_map = {
+        display_name: page_name
+        for display_name, page_name in LIQUIPEDIA_PAGE_NAMES.items()
+    }
+    logger.info("Fetching Liquipedia data for %d teams...", len(lp_teams_map))
+    lp_lookup = build_liquipedia_lookup(lp_teams_map)
+
     entries = []
     for player in cyberscore_players:
+        team_name = player["team"]
+        role_num = player["role_num"]
         datdota_name = match_player_to_datdota(player["nickname"], name_lookup)
 
-        # Always record the cyberscore name as an alt name when it differs
-        alt_names = ""
-        if datdota_name != player["nickname"]:
-            alt_names = player["nickname"]
+        # Collect alt names from both cyberscore and Liquipedia
+        alt_parts: list[str] = []
+        lp_team_data = lp_lookup.get(team_name)
 
-        # Build notes (e.g. stand-in status)
-        notes = "Stand-In" if player.get("is_standin", False) else ""
+        # Cyberscore alt name: if the cyberscore name differs from datdota name
+        cs_name = player["nickname"]
+        if cs_name != datdota_name:
+            alt_parts.append(cs_name)
+
+        # Liquipedia alt name: if the Liquipedia ID differs from both datdota
+        # and cyberscore names
+        if lp_team_data and lp_team_data.get("found"):
+            lp_alt = get_alt_name(lp_team_data, cs_name, role_num)
+            if lp_alt and lp_alt != datdota_name and lp_alt not in alt_parts:
+                alt_parts.append(lp_alt)
+
+        alt_names = ", ".join(alt_parts)
+
+        # Get stand-in status from Liquipedia
+        notes = ""
+        if lp_team_data and lp_team_data.get("found"):
+            notes = get_standin_notes(lp_team_data, player["nickname"], role_num)
+        # Fall back to cyberscore stand-in detection if no Liquipedia data
+        if not notes and player.get("is_standin", False):
+            notes = "Stand-In"
 
         entry = PlayerEntry(
-            team=player["team"],
-            role=player["role_num"],
+            team=team_name,
+            role=role_num,
             cyberscore_name=player["nickname"],
             datdota_name=datdota_name,
             alt_names=alt_names,

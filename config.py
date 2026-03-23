@@ -126,6 +126,46 @@ DATDOTA_NAME_OVERRIDES = {
     "OmaR": "Omar",
 }
 
+# Mapping from display team name (config key) to Liquipedia page name.
+# Used to fetch alt names and stand-in status from Liquipedia.
+# Teams not listed here will be skipped for Liquipedia data.
+LIQUIPEDIA_PAGE_NAMES: dict[str, str] = {
+    # Tier 1 teams
+    "Falcons": "Team_Falcons",
+    "Tundra": "Tundra_Esports",
+    "MOUZ": "MOUZ",
+    "Team Spirit": "Team_Spirit",
+    "Team Liquid": "Team_Liquid",
+    "PARIVISION": "PARIVISION",
+    "Team Yandex": "Team_Yandex",
+    "Aurora Gaming": "Aurora_Gaming",
+    "BetBoom Team": "BetBoom_Team",
+    "Natus Vincere": "Natus_Vincere",
+    "Xtreme Gaming": "Xtreme_Gaming",
+    "Heroic": "HEROIC",
+    "1WIN Team": "1w_Team",
+    "OG": "OG",
+    # Tier 2 teams
+    "Power Rangers": "Power_Rangers",
+    "Nigma Galaxy": "Nigma_Galaxy",
+    "GamerLegion": "GamerLegion",
+    "Vici Gaming": "Vici_Gaming",
+    # Tier 2-3 teams
+    "Virtus Pro": "Virtus.pro",
+    "L1GA TEAM": "L1GA_TEAM",
+    "Zero Tenacity": "Zero_Tenacity",
+    "Execration": "Execration",
+    "Yakult Brothers": "Yakult_Brothers",
+    "Nemiga Gaming": "Nemiga_Gaming",
+    "VP Prodigy": "VP.Prodigy",
+    "Team Nemesis": "Team_Nemesis",
+    "REKONIX": "REKONIX",
+    "Rune Eaters": "Rune_Eaters",
+    "Yangon Galacticos": "Yangon_Galacticos",
+    "X5 Gaming": "X5_Gaming",
+    "Power Rangers": "Power_Rangers",
+}
+
 # Google Sheet ID (from the sheet URL)
 # Example: https://docs.google.com/spreadsheets/d/SHEET_ID/edit
 GOOGLE_SHEET_ID = "1wWeavQ02B6NLqpN6KTCvglIYtpWvnPlrm_3dMDd-GNY"
