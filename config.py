@@ -83,7 +83,7 @@ DATDOTA_NAME_OVERRIDES = {
 GOOGLE_SHEET_ID = "1wWeavQ02B6NLqpN6KTCvglIYtpWvnPlrm_3dMDd-GNY"
 
 # Google Sheet worksheet name (tab name)
-WORKSHEET_NAME = "Sheet1"
+WORKSHEET_NAME = "7.40"
 
 # Worksheet name for daily change tracking
 CHANGES_WORKSHEET_NAME = "Daily Changes"
