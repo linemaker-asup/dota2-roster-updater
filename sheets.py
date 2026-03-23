@@ -272,14 +272,19 @@ def log_changes_to_sheet(
     )
 
 
-def update_google_sheet_with_changes(entries: list[PlayerEntry]) -> None:
+def update_google_sheet_with_changes(
+    entries: list[PlayerEntry], scraped_teams: set[str] | None = None
+) -> None:
     """Update the Google Sheet and log any roster changes to the Daily Changes tab.
 
     This reads the current roster, detects changes, logs them to the Daily Changes
-    tab, then updates the main roster sheet.
+    tab, then updates the main roster sheet. Teams that were not scraped (failed or
+    returned 0 players) are preserved from the existing sheet data.
 
     Args:
         entries: List of PlayerEntry objects to write to the sheet.
+        scraped_teams: Set of team names that were successfully scraped.
+            If provided, existing rows for teams NOT in this set are preserved.
     """
     if not GOOGLE_SHEET_ID:
         raise ValueError(
@@ -294,8 +299,37 @@ def update_google_sheet_with_changes(entries: list[PlayerEntry]) -> None:
     # Read current roster before updating
     old_roster = _read_current_roster(worksheet)
 
-    # Detect changes
-    changes = detect_changes(old_roster, entries)
+    # If we know which teams were scraped, preserve data for teams that weren't
+    if scraped_teams is not None:
+        preserved_entries = []
+        for row in old_roster:
+            if row["team"] not in scraped_teams:
+                preserved_entries.append(
+                    PlayerEntry(
+                        team=row["team"],
+                        role=int(row["role"]) if row["role"].isdigit() else 0,
+                        cyberscore_name="",
+                        datdota_name=row["datdota_name"],
+                        alt_names=row["alt_names"],
+                        notes=row["notes"],
+                    )
+                )
+        if preserved_entries:
+            logger.info(
+                "Preserving %d rows for %d teams that were not scraped",
+                len(preserved_entries),
+                len({e.team for e in preserved_entries}),
+            )
+            entries = list(entries) + preserved_entries
+
+    # Detect changes (only for teams that were actually scraped)
+    if scraped_teams is not None:
+        # Filter old roster to only include teams that were scraped
+        filtered_old = [r for r in old_roster if r["team"] in scraped_teams]
+        filtered_new = [e for e in entries if e.team in scraped_teams]
+        changes = detect_changes(filtered_old, filtered_new)
+    else:
+        changes = detect_changes(old_roster, entries)
 
     # Log changes to Daily Changes tab
     log_changes_to_sheet(spreadsheet, changes)

@@ -1,6 +1,9 @@
 """Scrape team rosters from cyberscore.live and resolve player names to datdota conventions."""
 
 import logging
+import os
+import signal
+import subprocess
 import time
 from dataclasses import dataclass
 
@@ -10,9 +13,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 from config import (
-    CHROMIUM_BINARY,
     DATDOTA_NAME_OVERRIDES,
-    PAGE_LOAD_WAIT,
     ROLE_MAP,
     TEAM_NAME_OVERRIDES,
     TEAMS_TO_TRACK,
@@ -33,6 +34,24 @@ class PlayerEntry:
     notes: str
 
 
+def _kill_zombie_chrome() -> None:
+    """Kill any leftover Chrome/Chromium processes to prevent resource exhaustion."""
+    try:
+        subprocess.run(
+            ["pkill", "-f", "chromium"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["pkill", "-f", "chrome"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+    except Exception:
+        pass
+
+
 def _create_driver() -> webdriver.Chrome:
     """Create a headless Chrome/Chromium driver."""
     options = Options()
@@ -40,13 +59,19 @@ def _create_driver() -> webdriver.Chrome:
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--single-process")
     options.add_argument("--window-size=1920,1080")
     options.add_argument(
         "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    if CHROMIUM_BINARY:
-        options.binary_location = CHROMIUM_BINARY
+    # Try to find chromium binary
+    for binary in ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome"]:
+        if os.path.exists(binary):
+            options.binary_location = binary
+            break
     return webdriver.Chrome(options=options)
 
 
@@ -110,13 +135,15 @@ def _parse_roster_from_html(html: str) -> list[dict]:
 
 
 def fetch_cyberscore_roster(
-    team_id: int, driver: webdriver.Chrome, retries: int = 2
+    team_id: int, retries: int = 2
 ) -> tuple[list[dict], str]:
     """Fetch a team's roster from cyberscore.live.
 
+    Creates a fresh browser for each call and cleans up afterward to avoid
+    Chrome process accumulation.
+
     Args:
         team_id: The cyberscore.live team ID.
-        driver: Selenium WebDriver instance.
         retries: Number of retries if roster parsing fails.
 
     Returns:
@@ -125,66 +152,93 @@ def fetch_cyberscore_roster(
     url = f"https://cyberscore.live/en/teams/{team_id}/"
     for attempt in range(retries + 1):
         logger.info("Fetching roster from %s (attempt %d)", url, attempt + 1)
-        driver.get(url)
-        wait = PAGE_LOAD_WAIT + attempt * 5
-        time.sleep(wait)
+        driver = _create_driver()
+        try:
+            driver.get(url)
+            wait = 10 + attempt * 5
+            time.sleep(wait)
 
-        html = driver.page_source
-        title = driver.title
+            html = driver.page_source
+            title = driver.title
 
-        # Check if we got past Cloudflare
-        if "Just a moment" in title or len(html) < 5000:
-            logger.warning("Cloudflare challenge detected, retrying...")
-            time.sleep(5)
-            continue
+            # Check if we got past Cloudflare
+            if "Just a moment" in title or len(html) < 5000:
+                logger.warning("Cloudflare challenge detected, retrying...")
+                time.sleep(5)
+                continue
 
-        roster = _parse_roster_from_html(html)
-        team_name = ""
-        if "Dota 2" in title:
-            team_name = title.split("Dota 2")[0].strip()
+            roster = _parse_roster_from_html(html)
+            team_name = ""
+            if "Dota 2" in title:
+                team_name = title.split("Dota 2")[0].strip()
 
-        if roster:
-            return roster, team_name
+            if roster:
+                return roster, team_name
 
-        logger.warning("No roster found on attempt %d", attempt + 1)
+            logger.warning("No roster found on attempt %d", attempt + 1)
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            _kill_zombie_chrome()
 
     return [], ""
 
 
-def fetch_all_cyberscore_rosters() -> list[dict]:
+def fetch_all_cyberscore_rosters() -> tuple[list[dict], set[str]]:
     """Fetch rosters for all configured teams from cyberscore.live.
 
-    Creates a fresh browser session for each team to avoid Cloudflare issues.
+    Creates a fresh browser session for each team and kills zombie Chrome
+    processes between teams to prevent resource exhaustion.
 
     Returns:
-        List of dicts with team, role, nickname, player_id for each player.
+        Tuple of (player list, set of team display names that were successfully scraped).
     """
     all_players = []
+    scraped_teams: set[str] = set()
+    teams_processed = 0
+
+    # Kill any existing Chrome processes before starting
+    _kill_zombie_chrome()
 
     for sheet_name, team_id in TEAMS_TO_TRACK.items():
-        driver = _create_driver()
         try:
-            roster, cs_team_name = fetch_cyberscore_roster(team_id, driver)
-            # Use override if available, otherwise use the config key
-            display_name = TEAM_NAME_OVERRIDES.get(cs_team_name, sheet_name)
-
-            for player in roster:
-                player["team"] = display_name
-                all_players.append(player)
-
-            logger.info(
-                "Found %d players for %s (%s)",
-                len(roster),
-                display_name,
-                cs_team_name,
+            roster, cs_team_name = fetch_cyberscore_roster(team_id)
+        except Exception as e:
+            logger.error(
+                "Failed to fetch %s (ID %d): %s",
+                sheet_name,
+                team_id,
+                e,
             )
-        finally:
-            driver.quit()
+            _kill_zombie_chrome()
+            roster, cs_team_name = [], ""
 
-        # Brief pause between teams to be polite to the server
+        # Use override if available, otherwise use the config key
+        display_name = TEAM_NAME_OVERRIDES.get(cs_team_name, sheet_name)
+
+        if roster:
+            scraped_teams.add(display_name)
+
+        for player in roster:
+            player["team"] = display_name
+            all_players.append(player)
+
+        teams_processed += 1
+        logger.info(
+            "Found %d players for %s (%s) [%d/%d]",
+            len(roster),
+            display_name,
+            cs_team_name,
+            teams_processed,
+            len(TEAMS_TO_TRACK),
+        )
+
+        # Brief pause between teams
         time.sleep(2)
 
-    return all_players
+    return all_players, scraped_teams
 
 
 def fetch_opendota_pro_players() -> list[dict]:
@@ -262,14 +316,14 @@ def match_player_to_datdota(
     return cyberscore_nickname
 
 
-def build_roster_data() -> list[PlayerEntry]:
+def build_roster_data() -> tuple[list[PlayerEntry], set[str]]:
     """Build the complete roster data by combining cyberscore and datdota data.
 
     Returns:
-        List of PlayerEntry objects ready for Google Sheet update.
+        Tuple of (list of PlayerEntry objects, set of successfully scraped team names).
     """
     # Fetch data from both sources
-    cyberscore_players = fetch_all_cyberscore_rosters()
+    cyberscore_players, scraped_teams = fetch_all_cyberscore_rosters()
     pro_players = fetch_opendota_pro_players()
     name_lookup = build_name_lookup(pro_players)
 
@@ -295,4 +349,4 @@ def build_roster_data() -> list[PlayerEntry]:
         )
         entries.append(entry)
 
-    return entries
+    return entries, scraped_teams

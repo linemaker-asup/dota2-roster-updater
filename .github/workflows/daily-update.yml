@@ -37,8 +37,6 @@ jobs:
 
       - name: Run roster update
         run: python main.py --update-sheet
-        env:
-          DISPLAY: ":99"
 
       - name: Clean up credentials
         if: always()

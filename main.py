@@ -55,11 +55,15 @@ def main() -> None:
         config.TEAMS_TO_TRACK = {k: v for k, v in original.items() if k in args.teams}
 
     logger.info("Building roster data...")
-    entries = build_roster_data()
+    entries, scraped_teams = build_roster_data()
 
     if not entries:
         logger.error("No roster data found. Check your network connection and config.")
         sys.exit(1)
+
+    logger.info(
+        "Successfully scraped %d teams with roster data", len(scraped_teams)
+    )
 
     # Always print the table
     print()
@@ -74,7 +78,7 @@ def main() -> None:
             )
             sys.exit(1)
         logger.info("Updating Google Sheet (with change tracking)...")
-        update_google_sheet_with_changes(entries)
+        update_google_sheet_with_changes(entries, scraped_teams=scraped_teams)
         logger.info("Google Sheet updated successfully!")
     else:
         logger.info(
