@@ -12,7 +12,7 @@ import sys
 
 from config import GOOGLE_SHEET_ID, TEAMS_TO_TRACK
 from scraper import build_roster_data
-from sheets import print_roster_table, update_google_sheet
+from sheets import print_roster_table, update_google_sheet_with_changes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,16 +52,18 @@ def main() -> None:
         import config
 
         original = config.TEAMS_TO_TRACK.copy()
-        config.TEAMS_TO_TRACK = {
-            k: v for k, v in original.items() if k in args.teams
-        }
+        config.TEAMS_TO_TRACK = {k: v for k, v in original.items() if k in args.teams}
 
     logger.info("Building roster data...")
-    entries = build_roster_data()
+    entries, scraped_teams = build_roster_data()
 
     if not entries:
         logger.error("No roster data found. Check your network connection and config.")
         sys.exit(1)
+
+    logger.info(
+        "Successfully scraped %d teams with roster data", len(scraped_teams)
+    )
 
     # Always print the table
     print()
@@ -75,8 +77,8 @@ def main() -> None:
                 "Set it to your Google Sheet ID before using --update-sheet."
             )
             sys.exit(1)
-        logger.info("Updating Google Sheet...")
-        update_google_sheet(entries)
+        logger.info("Updating Google Sheet (with change tracking)...")
+        update_google_sheet_with_changes(entries, scraped_teams=scraped_teams)
         logger.info("Google Sheet updated successfully!")
     else:
         logger.info(
