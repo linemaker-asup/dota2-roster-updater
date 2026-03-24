@@ -41,7 +41,7 @@ def update_google_sheet(entries: list[PlayerEntry]) -> None:
     """Update the Google Sheet with roster data.
 
     Replaces all data below the header row with the new roster entries.
-    Expected columns: Team | Role | Player Name (datdota) | Alt. Name(s) | Notes
+    Expected columns: Team | Role | Player Name | Player Name (datdota) | Alt. Name(s) | Notes
 
     Args:
         entries: List of PlayerEntry objects to write to the sheet.
@@ -61,7 +61,7 @@ def update_google_sheet(entries: list[PlayerEntry]) -> None:
     rows = []
     for entry in entries_sorted:
         rows.append(
-            [entry.team, entry.role, entry.datdota_name, entry.alt_names, entry.notes]
+            [entry.team, entry.role, entry.lp_name, entry.datdota_name, entry.alt_names, entry.notes]
         )
 
     # Clear existing data (keep header row)
@@ -69,12 +69,12 @@ def update_google_sheet(entries: list[PlayerEntry]) -> None:
     if len(existing) > 1:
         # Clear from row 2 onwards
         end_row = max(len(existing), len(rows) + 1)
-        cell_range = f"A2:E{end_row}"
+        cell_range = f"A2:F{end_row}"
         worksheet.batch_clear([cell_range])
 
     # Write new data starting from row 2
     if rows:
-        cell_range = f"A2:E{len(rows) + 1}"
+        cell_range = f"A2:F{len(rows) + 1}"
         worksheet.update(cell_range, rows)
 
     logger.info("Updated Google Sheet with %d player entries", len(rows))
@@ -84,7 +84,7 @@ def _read_current_roster(worksheet: gspread.Worksheet) -> list[dict]:
     """Read the current roster data from the Google Sheet.
 
     Returns:
-        List of dicts with keys: team, role, datdota_name, alt_names, notes.
+        List of dicts with keys: team, role, lp_name, datdota_name, alt_names, notes.
         Each dict represents one row from the sheet (skipping the header).
     """
     rows = worksheet.get_all_values()
@@ -99,9 +99,10 @@ def _read_current_roster(worksheet: gspread.Worksheet) -> list[dict]:
             {
                 "team": row[0],
                 "role": str(row[1]) if len(row) > 1 else "",
-                "datdota_name": row[2] if len(row) > 2 else "",
-                "alt_names": row[3] if len(row) > 3 else "",
-                "notes": row[4] if len(row) > 4 else "",
+                "lp_name": row[2] if len(row) > 2 else "",
+                "datdota_name": row[3] if len(row) > 3 else "",
+                "alt_names": row[4] if len(row) > 4 else "",
+                "notes": row[5] if len(row) > 5 else "",
             }
         )
     return current
@@ -140,6 +141,7 @@ def detect_changes(
         new_by_team_role[key] = {
             "team": entry.team,
             "role": str(entry.role),
+            "lp_name": entry.lp_name,
             "datdota_name": entry.datdota_name,
             "alt_names": entry.alt_names,
             "notes": entry.notes,
@@ -308,6 +310,7 @@ def update_google_sheet_with_changes(
                     PlayerEntry(
                         team=row["team"],
                         role=int(row["role"]) if row["role"].isdigit() else 0,
+                        lp_name=row.get("lp_name", ""),
                         cyberscore_name="",
                         datdota_name=row["datdota_name"],
                         alt_names=row["alt_names"],
@@ -350,19 +353,19 @@ def update_google_sheet_with_changes(
     rows = []
     for entry in entries_sorted:
         rows.append(
-            [entry.team, entry.role, entry.datdota_name, entry.alt_names, entry.notes]
+            [entry.team, entry.role, entry.lp_name, entry.datdota_name, entry.alt_names, entry.notes]
         )
 
     # Clear existing data (keep header row)
     existing = worksheet.get_all_values()
     if len(existing) > 1:
         end_row = max(len(existing), len(rows) + 1)
-        cell_range = f"A2:E{end_row}"
+        cell_range = f"A2:F{end_row}"
         worksheet.batch_clear([cell_range])
 
     # Write new data starting from row 2
     if rows:
-        cell_range = f"A2:E{len(rows) + 1}"
+        cell_range = f"A2:F{len(rows) + 1}"
         worksheet.update(cell_range, rows)
 
     logger.info("Updated Google Sheet with %d player entries", len(rows))
@@ -373,12 +376,12 @@ def print_roster_table(entries: list[PlayerEntry]) -> None:
     entries_sorted = sorted(entries, key=lambda e: (e.team, e.role))
 
     print(
-        f"{'Team':<20} {'Role':<6} {'Player Name (datdota)':<25} "
-        f"{'Alt. Name(s)':<20} {'Notes':<15}"
+        f"{'Team':<20} {'Role':<6} {'Player Name':<25} "
+        f"{'Player Name (datdota)':<25} {'Alt. Name(s)':<25} {'Notes':<15}"
     )
-    print("-" * 90)
+    print("-" * 120)
     for entry in entries_sorted:
         print(
-            f"{entry.team:<20} {entry.role:<6} {entry.datdota_name:<25} "
-            f"{entry.alt_names:<20} {entry.notes:<15}"
+            f"{entry.team:<20} {entry.role:<6} {entry.lp_name:<25} "
+            f"{entry.datdota_name:<25} {entry.alt_names:<25} {entry.notes:<15}"
         )
