@@ -459,8 +459,25 @@ def fetch_player_alt_ids_batch(
         _rate_limit()
         try:
             resp = requests.get(url, headers=_HEADERS, timeout=30)
+
+            # Retry up to 3 times on rate limit with exponential backoff
+            for retry in range(1, 4):
+                if resp.status_code != 429:
+                    break
+                wait_time = 10 * retry  # 10s, 20s, 30s
+                logger.warning(
+                    "Rate limited fetching player pages, retrying in %ds "
+                    "(attempt %d/3)...",
+                    wait_time,
+                    retry,
+                )
+                time.sleep(wait_time)
+                resp = requests.get(url, headers=_HEADERS, timeout=30)
+
             if resp.status_code == 429:
-                logger.warning("Rate limited fetching player pages, skipping batch")
+                logger.warning(
+                    "Still rate limited after 3 retries, skipping batch"
+                )
                 continue
             if resp.status_code != 200:
                 logger.warning("Player page batch returned %d", resp.status_code)
@@ -768,14 +785,12 @@ def get_lp_player_name(
         if _player_matches_any_id(cyberscore_name, p):
             return p["id"]
 
-    # Fall back to position-based matching only if the cyberscore name
-    # matches the permanent player at that position (avoids returning the
-    # permanent player's name when a stand-in is playing).
+    # Fall back to position-based matching.  This is needed when a player's
+    # cyberscore name is in a different script (e.g. Latin "mister moral" vs
+    # Cyrillic "мистер мораль") and alt_ids haven't been fetched yet.
     for p in active_players:
         if p["position"] == position:
-            if _player_matches_any_id(cyberscore_name, p):
-                return p["id"]
-            break
+            return p["id"]
 
     return ""
 
@@ -814,8 +829,7 @@ def get_alt_name(
     if not matched_player:
         for p in active_players:
             if p["position"] == position:
-                if _player_matches_any_id(cyberscore_name, p):
-                    matched_player = p
+                matched_player = p
                 break
 
     if not matched_player:
