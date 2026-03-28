@@ -30,6 +30,16 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Restore Liquipedia cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            lp_cache.json
+            lp_parsed_cache.json
+          key: lp-cache-${{ github.run_id }}
+          restore-keys: |
+            lp-cache-
+
       - name: Write Google credentials
         run: echo "$GOOGLE_CREDENTIALS_JSON" > credentials.json
         env:
