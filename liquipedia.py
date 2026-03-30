@@ -69,6 +69,11 @@ def _scrub_cached_alt_ids() -> None:
 
     This is a one-time migration for caches written before the
     comment-stripping fix was added to ``_parse_player_alt_ids``.
+
+    The old code split on commas *before* stripping comments, so a comment
+    like ``<!--DPC2021, 2023-->`` got broken across multiple list items.
+    To handle this we rejoin the list into a single string, strip comments,
+    then re-split — exactly like ``_parse_player_alt_ids`` does now.
     """
     dirty = False
     for team_data in _parsed_cache.values():
@@ -76,9 +81,13 @@ def _scrub_cached_alt_ids() -> None:
             raw = p.get("alt_ids")
             if not raw:
                 continue
+            # Rejoin into a single string so the regex can match comments
+            # that were split across list items by commas.
+            joined = ", ".join(raw)
+            joined = re.sub(r"<!--.*?-->", "", joined)
             cleaned = []
-            for aid in raw:
-                aid = re.sub(r"<!--.*?-->", "", aid).strip()
+            for aid in joined.split(","):
+                aid = aid.strip()
                 if aid and re.search(r"\w", aid, flags=re.UNICODE):
                     cleaned.append(aid)
             if cleaned != raw:
@@ -479,86 +488,105 @@ def fetch_player_alt_ids_batch(
         page_name = _resolve_player_page_name(p)
         page_to_ids.setdefault(page_name, []).append(p["id"])
 
-    # Fetch in batches of 50 (MediaWiki limit)
-    page_names = list(page_to_ids.keys())
-    for batch_start in range(0, len(page_names), 50):
-        batch = page_names[batch_start : batch_start + 50]
-        titles_param = "|".join(batch)
-        url = (
-            "https://liquipedia.net/dota2/api.php"
-            "?action=query"
-            f"&titles={titles_param}"
-            "&prop=revisions&rvprop=content&rvslots=main"
-            "&rvsection=0&format=json"
-        )
+    def _fetch_pages_batch(page_names_to_fetch: list[str]) -> list[str]:
+        """Fetch a list of pages and return any redirect targets found."""
+        redirect_targets: list[str] = []
+        for batch_start in range(0, len(page_names_to_fetch), 50):
+            batch = page_names_to_fetch[batch_start : batch_start + 50]
+            titles_param = "|".join(batch)
+            url = (
+                "https://liquipedia.net/dota2/api.php"
+                "?action=query"
+                f"&titles={titles_param}"
+                "&prop=revisions&rvprop=content&rvslots=main"
+                "&rvsection=0&format=json"
+            )
 
-        _rate_limit()
-        try:
-            resp = requests.get(url, headers=_HEADERS, timeout=30)
-
-            # Retry up to 3 times on rate limit with exponential backoff
-            for retry in range(1, 4):
-                if resp.status_code != 429:
-                    break
-                wait_time = 10 * retry  # 10s, 20s, 30s
-                logger.warning(
-                    "Rate limited fetching player pages, retrying in %ds "
-                    "(attempt %d/3)...",
-                    wait_time,
-                    retry,
-                )
-                time.sleep(wait_time)
+            _rate_limit()
+            try:
                 resp = requests.get(url, headers=_HEADERS, timeout=30)
 
-            if resp.status_code == 429:
-                logger.warning(
-                    "Still rate limited after 3 retries, skipping batch"
-                )
-                continue
-            if resp.status_code != 200:
-                logger.warning("Player page batch returned %d", resp.status_code)
-                continue
+                # Retry up to 3 times on rate limit with exponential backoff
+                for retry in range(1, 4):
+                    if resp.status_code != 429:
+                        break
+                    wait_time = 10 * retry  # 10s, 20s, 30s
+                    logger.warning(
+                        "Rate limited fetching player pages, retrying in %ds "
+                        "(attempt %d/3)...",
+                        wait_time,
+                        retry,
+                    )
+                    time.sleep(wait_time)
+                    resp = requests.get(url, headers=_HEADERS, timeout=30)
 
-            data = resp.json()
-            pages = data.get("query", {}).get("pages", {})
-
-            # Build a normalised title lookup
-            normalised = {}
-            for n in data.get("query", {}).get("normalized", []):
-                normalised[n["to"]] = n["from"]
-
-            for page_id_str, page_data in pages.items():
-                if page_id_str == "-1" or "missing" in page_data:
+                if resp.status_code == 429:
+                    logger.warning(
+                        "Still rate limited after 3 retries, skipping batch"
+                    )
                     continue
-                title = page_data.get("title", "")
-                # Map back to our page_name key
-                original_key = normalised.get(title, title).replace(" ", "_")
-                revisions = page_data.get("revisions", [])
-                if not revisions:
+                if resp.status_code != 200:
+                    logger.warning(
+                        "Player page batch returned %d", resp.status_code
+                    )
                     continue
-                content = (
-                    revisions[0]
-                    .get("slots", {})
-                    .get("main", {})
-                    .get("*", "")
-                )
-                # Handle redirects — fetch the target page
-                if content.startswith("#REDIRECT"):
-                    redir_match = re.search(r"\[\[([^\]]+)\]\]", content)
-                    if redir_match:
-                        target = redir_match.group(1).replace(" ", "_")
-                        # We'll handle redirect targets in a second pass
-                        page_to_ids.setdefault(target, []).extend(
-                            page_to_ids.get(original_key, [])
+
+                data = resp.json()
+                pages = data.get("query", {}).get("pages", {})
+
+                # Build a normalised title lookup
+                normalised = {}
+                for n in data.get("query", {}).get("normalized", []):
+                    normalised[n["to"]] = n["from"]
+
+                for page_id_str, page_data in pages.items():
+                    if page_id_str == "-1" or "missing" in page_data:
+                        continue
+                    title = page_data.get("title", "")
+                    # Map back to our page_name key
+                    original_key = normalised.get(title, title).replace(
+                        " ", "_"
+                    )
+                    revisions = page_data.get("revisions", [])
+                    if not revisions:
+                        continue
+                    content = (
+                        revisions[0]
+                        .get("slots", {})
+                        .get("main", {})
+                        .get("*", "")
+                    )
+                    # Handle redirects — collect targets for a second pass
+                    if content.startswith("#REDIRECT"):
+                        redir_match = re.search(
+                            r"\[\[([^\]]+)\]\]", content
                         )
-                    continue
+                        if redir_match:
+                            target = redir_match.group(1).replace(" ", "_")
+                            page_to_ids.setdefault(target, []).extend(
+                                page_to_ids.get(original_key, [])
+                            )
+                            redirect_targets.append(target)
+                        continue
 
-                alt_ids = _parse_player_alt_ids(content)
-                for pid in page_to_ids.get(original_key, []):
-                    result[pid] = alt_ids
+                    alt_ids = _parse_player_alt_ids(content)
+                    for pid in page_to_ids.get(original_key, []):
+                        result[pid] = alt_ids
 
-        except Exception as e:
-            logger.warning("Failed to fetch player alt IDs batch: %s", e)
+            except Exception as e:
+                logger.warning("Failed to fetch player alt IDs batch: %s", e)
+
+        return redirect_targets
+
+    # First pass: fetch all player pages
+    page_names = list(page_to_ids.keys())
+    redirects = _fetch_pages_batch(page_names)
+
+    # Second pass: fetch redirect targets that weren't already resolved
+    unresolved = [t for t in redirects if t not in result and t in page_to_ids]
+    if unresolved:
+        logger.info("Fetching %d redirect target pages...", len(unresolved))
+        _fetch_pages_batch(unresolved)
 
     return result
 
