@@ -295,7 +295,6 @@ def parse_active_squad(wikitext: str) -> list[dict]:
                     "flag": flag,
                     "captain": captain,
                     "link": link,
-                    "alt_ids": [],  # populated later by fetch_player_alt_ids
                 }
             )
 
@@ -607,10 +606,8 @@ def build_liquipedia_lookup(
                 total,
             )
             # Queue players that don't have alt_ids yet.
-            # Note: distinguish between "not fetched" (key missing) and
-            # "fetched but empty" (empty list []).
             for p in data["players"]:
-                if "alt_ids" not in p:
+                if not p.get("alt_ids"):
                     all_players_needing_alt_ids.append(p)
         else:
             logger.warning(
