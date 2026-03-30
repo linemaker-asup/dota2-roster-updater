@@ -19,7 +19,7 @@ _HEADERS = {
 # Minimum delay between Liquipedia API requests (seconds).
 # MediaWiki API requires at least 2 seconds between requests per Liquipedia TOS.
 # We use action=query (not action=parse) to stay within the 2s limit.
-_REQUEST_DELAY = 3.0
+_REQUEST_DELAY = 5.0
 
 # Track the last request time to enforce rate limiting
 _last_request_time = 0.0
@@ -128,15 +128,15 @@ def fetch_team_wikitext(page_name: str) -> str | None:
         "&prop=revisions&rvprop=content&rvslots=main"
         "&format=json"
     )
-    max_retries = 2
+    max_retries = 4
     for attempt in range(max_retries + 1):
         try:
             resp = requests.get(url, headers=_HEADERS, timeout=15)
             if resp.status_code == 429:
-                wait_time = 30 * (attempt + 1)
+                wait_time = 60 * (attempt + 1)
                 logger.warning(
-                    "Liquipedia rate limited for %s, waiting %ds (attempt %d)...",
-                    page_name, wait_time, attempt + 1,
+                    "Liquipedia rate limited for %s, waiting %ds (attempt %d/%d)...",
+                    page_name, wait_time, attempt + 1, max_retries + 1,
                 )
                 time.sleep(wait_time)
                 continue
@@ -295,7 +295,6 @@ def parse_active_squad(wikitext: str) -> list[dict]:
                     "flag": flag,
                     "captain": captain,
                     "link": link,
-                    "alt_ids": [],  # populated later by fetch_player_alt_ids
                 }
             )
 
@@ -607,10 +606,8 @@ def build_liquipedia_lookup(
                 total,
             )
             # Queue players that don't have alt_ids yet.
-            # Note: distinguish between "not fetched" (key missing) and
-            # "fetched but empty" (empty list []).
             for p in data["players"]:
-                if "alt_ids" not in p:
+                if not p.get("alt_ids"):
                     all_players_needing_alt_ids.append(p)
         else:
             logger.warning(
