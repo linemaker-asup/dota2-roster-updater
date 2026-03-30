@@ -400,8 +400,17 @@ def _parse_player_alt_ids(wikitext: str) -> list[str]:
     if not ids_str:
         return []
 
-    # Split on comma and clean up
-    return [aid.strip() for aid in ids_str.split(",") if aid.strip()]
+    # Strip HTML comments (e.g. <!--DPC2021-->)
+    ids_str = re.sub(r"<!--.*?-->", "", ids_str)
+
+    # Split on comma, clean up, and filter out punctuation-only artifacts
+    result = []
+    for aid in ids_str.split(","):
+        aid = aid.strip()
+        # Skip empty or punctuation-only strings (artifacts from comment stripping)
+        if aid and re.search(r"\w", aid, flags=re.UNICODE):
+            result.append(aid)
+    return result
 
 
 def _resolve_player_page_name(player: dict) -> str:
@@ -557,6 +566,17 @@ def get_team_liquipedia_data(
 
     players = parse_active_squad(wikitext)
     standins = parse_standins(wikitext)
+
+    # Carry over cached alt_ids for players that haven't changed.
+    # This avoids re-fetching alt IDs from individual player pages
+    # when only the team page is refreshed.
+    if page_name in _parsed_cache:
+        old_players = _parsed_cache[page_name].get("players", [])
+        old_by_id = {p["id"]: p for p in old_players}
+        for p in players:
+            old_p = old_by_id.get(p["id"])
+            if old_p and old_p.get("alt_ids"):
+                p["alt_ids"] = old_p["alt_ids"]
 
     # Save to parsed cache for next time
     _parsed_cache[page_name] = {
