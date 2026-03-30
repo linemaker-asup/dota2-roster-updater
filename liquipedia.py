@@ -64,6 +64,31 @@ def _save_cache() -> None:
         logger.warning("Failed to save cache: %s", e)
 
 
+def _scrub_cached_alt_ids() -> None:
+    """Remove HTML comments from any alt_ids already stored in the cache.
+
+    This is a one-time migration for caches written before the
+    comment-stripping fix was added to ``_parse_player_alt_ids``.
+    """
+    dirty = False
+    for team_data in _parsed_cache.values():
+        for p in team_data.get("players", []):
+            raw = p.get("alt_ids")
+            if not raw:
+                continue
+            cleaned = []
+            for aid in raw:
+                aid = re.sub(r"<!--.*?-->", "", aid).strip()
+                if aid and re.search(r"\w", aid, flags=re.UNICODE):
+                    cleaned.append(aid)
+            if cleaned != raw:
+                p["alt_ids"] = cleaned
+                dirty = True
+    if dirty:
+        _save_parsed_cache()
+        logger.info("Scrubbed HTML comments from cached alt_ids")
+
+
 def _load_parsed_cache() -> None:
     """Load the parsed data cache from disk if it exists."""
     global _parsed_cache, _parsed_cache_loaded
@@ -74,6 +99,9 @@ def _load_parsed_cache() -> None:
         try:
             with open(PARSED_CACHE_FILE) as f:
                 _parsed_cache = json.load(f)
+            # Scrub any HTML comments from cached alt_ids (one-time cleanup
+            # for caches written before the comment-stripping fix).
+            _scrub_cached_alt_ids()
             logger.info(
                 "Loaded parsed Liquipedia cache with %d entries",
                 len(_parsed_cache),
