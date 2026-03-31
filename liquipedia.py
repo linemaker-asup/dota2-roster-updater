@@ -460,8 +460,10 @@ def _resolve_player_page_name(player: dict) -> str:
     if link:
         return link.replace(" ", "_")
     pid = player["id"]
-    # Liquipedia page names have the first letter capitalised
-    return pid[0].upper() + pid[1:] if pid else pid
+    # Liquipedia page names have the first letter capitalised and use
+    # underscores instead of spaces.
+    page = pid[0].upper() + pid[1:] if pid else pid
+    return page.replace(" ", "_")
 
 
 def fetch_player_alt_ids_batch(
