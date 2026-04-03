@@ -244,6 +244,53 @@ def fetch_all_cyberscore_rosters() -> tuple[list[dict], set[str]]:
     return all_players, scraped_teams
 
 
+def fetch_datdota_player_names() -> dict[str, str]:
+    """Fetch canonical player names from the datdota API.
+
+    Calls the datdota performances endpoint to get player names exactly
+    as datdota displays them (e.g. 'No!ob' without the trademark symbol
+    that OpenDota appends).
+
+    Returns:
+        Dict mapping lowercase player name -> canonical datdota name.
+        Returns empty dict if the API is unavailable.
+    """
+    url = (
+        "https://api.datdota.com/api/players/performances"
+        "?tier=1,2,3"
+        "&threshold=1"
+        "&after=2024-01-01"
+        "&before=2030-01-01"
+    )
+    logger.info("Fetching player names from datdota API")
+    lookup: dict[str, str] = {}
+    try:
+        response = requests.get(url, timeout=30)
+        if response.status_code != 200:
+            logger.warning(
+                "datdota API returned %d, falling back to OpenDota",
+                response.status_code,
+            )
+            return {}
+        data = response.json()
+        # The performances endpoint returns a list of player rows.
+        # Each row has a "name" (or "player") field with the canonical name.
+        rows = data if isinstance(data, list) else data.get("data", data.get("rows", []))
+        for row in rows:
+            name = (
+                row.get("name")
+                or row.get("player")
+                or row.get("Player")
+                or row.get("playerName")
+            )
+            if name and isinstance(name, str):
+                lookup[name.lower().strip()] = name
+        logger.info("Loaded %d player names from datdota", len(lookup))
+    except Exception as e:
+        logger.warning("Failed to fetch datdota player names: %s", e)
+    return lookup
+
+
 def fetch_opendota_pro_players() -> list[dict]:
     """Fetch all pro players from the OpenDota API.
 
@@ -284,18 +331,22 @@ def build_name_lookup(pro_players: list[dict]) -> dict[str, dict]:
 
 
 def match_player_to_datdota(
-    cyberscore_nickname: str, name_lookup: dict[str, dict]
+    cyberscore_nickname: str,
+    name_lookup: dict[str, dict],
+    datdota_names: dict[str, str],
 ) -> str:
     """Find the datdota name for a player given their cyberscore nickname.
 
     Resolution order:
     1. Manual override from DATDOTA_NAME_OVERRIDES config
-    2. Direct match in OpenDota pro player names (case-insensitive)
-    3. Fall back to the cyberscore name as-is (usually matches datdota)
+    2. Direct match in datdota API names (case-insensitive)
+    3. Direct match in OpenDota pro player names (case-insensitive)
+    4. Fall back to the cyberscore name as-is (usually matches datdota)
 
     Args:
         cyberscore_nickname: Player nickname from cyberscore.live
-        name_lookup: Lookup dict from build_name_lookup()
+        name_lookup: Lookup dict from build_name_lookup() (OpenDota)
+        datdota_names: Lookup dict from fetch_datdota_player_names()
 
     Returns:
         The datdota player name.
@@ -306,7 +357,11 @@ def match_player_to_datdota(
 
     key = cyberscore_nickname.lower().strip()
 
-    # 2. Check OpenDota pro player name lookup (case-insensitive)
+    # 2. Check datdota API names (canonical source)
+    if key in datdota_names:
+        return datdota_names[key]
+
+    # 3. Check OpenDota pro player name lookup (case-insensitive)
     if key in name_lookup:
         opendota_name = name_lookup[key]["name"]
         # Only use the OpenDota name if it matches the cyberscore name
@@ -315,7 +370,7 @@ def match_player_to_datdota(
         if opendota_name.lower() == key:
             return opendota_name
 
-    # 3. Fall back to cyberscore name (usually matches datdota)
+    # 4. Fall back to cyberscore name (usually matches datdota)
     return cyberscore_nickname
 
 
@@ -324,7 +379,8 @@ def build_roster_data() -> tuple[list[PlayerEntry], set[str]]:
 
     Data sources:
     - Cyberscore.live: team rosters (who is currently playing)
-    - OpenDota: canonical datdota player names
+    - datdota API: canonical datdota player names (primary)
+    - OpenDota: fallback for datdota player names
     - Liquipedia: alt names and stand-in status
 
     Returns:
@@ -332,6 +388,7 @@ def build_roster_data() -> tuple[list[PlayerEntry], set[str]]:
     """
     # Fetch data from all sources
     cyberscore_players, scraped_teams = fetch_all_cyberscore_rosters()
+    datdota_names = fetch_datdota_player_names()
     pro_players = fetch_opendota_pro_players()
     name_lookup = build_name_lookup(pro_players)
 
@@ -349,7 +406,7 @@ def build_roster_data() -> tuple[list[PlayerEntry], set[str]]:
         team_name = player["team"]
         role_num = player["role_num"]
         cs_name = player["nickname"]
-        datdota_name = match_player_to_datdota(cs_name, name_lookup)
+        datdota_name = match_player_to_datdota(cs_name, name_lookup, datdota_names)
 
         lp_team_data = lp_lookup.get(team_name)
 
