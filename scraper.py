@@ -244,6 +244,15 @@ def fetch_all_cyberscore_rosters() -> tuple[list[dict], set[str]]:
     return all_players, scraped_teams
 
 
+def _strip_symbols(name: str) -> str:
+    """Strip trademark/registered symbols and extra whitespace from a player name.
+
+    datdota does not include ™ or ® in player names, but OpenDota sometimes
+    appends them (e.g. OpenDota returns 'No!ob™' while datdota shows 'No!ob').
+    """
+    return name.replace("\u2122", "").replace("\u00ae", "").strip()
+
+
 def fetch_datdota_player_names() -> dict[str, str]:
     """Fetch canonical player names from the datdota API.
 
@@ -273,10 +282,19 @@ def fetch_datdota_player_names() -> dict[str, str]:
             )
             return {}
         data = response.json()
-        # The performances endpoint returns a list of player rows.
-        # Each row has a "name" (or "player") field with the canonical name.
+        # Log the raw response structure so we can verify/fix parsing
+        # on the first GH Actions run (datdota API is behind Cloudflare
+        # and inaccessible from dev machines).
+        if isinstance(data, list):
+            logger.info("datdota API returned a list of %d items", len(data))
+            if data:
+                logger.info("First item keys: %s", list(data[0].keys()) if isinstance(data[0], dict) else type(data[0]))
+        elif isinstance(data, dict):
+            logger.info("datdota API returned a dict with keys: %s", list(data.keys()))
         rows = data if isinstance(data, list) else data.get("data", data.get("rows", []))
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             name = (
                 row.get("name")
                 or row.get("player")
@@ -286,6 +304,13 @@ def fetch_datdota_player_names() -> dict[str, str]:
             if name and isinstance(name, str):
                 lookup[name.lower().strip()] = name
         logger.info("Loaded %d player names from datdota", len(lookup))
+        if not lookup and rows:
+            # Log a sample row so we can identify the correct field name
+            sample = rows[0] if isinstance(rows[0], dict) else rows[0]
+            logger.warning(
+                "datdota API returned rows but no names extracted. Sample row: %s",
+                sample,
+            )
     except Exception as e:
         logger.warning("Failed to fetch datdota player names: %s", e)
     return lookup
@@ -367,8 +392,10 @@ def match_player_to_datdota(
         # Only use the OpenDota name if it matches the cyberscore name
         # (case-insensitive), since OpenDota sometimes uses different
         # names than datdota (e.g., OpenDota: "AMMAR_THE_F" vs datdota: "ATF")
-        if opendota_name.lower() == key:
-            return opendota_name
+        if opendota_name.lower().strip() == key:
+            # Strip ™/® symbols that OpenDota sometimes appends but
+            # datdota does not use (e.g. OpenDota: "No!ob™" → "No!ob").
+            return _strip_symbols(opendota_name)
 
     # 4. Fall back to cyberscore name (usually matches datdota)
     return cyberscore_nickname
