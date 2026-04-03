@@ -124,6 +124,12 @@ DATDOTA_NAME_OVERRIDES = {
     "CHIRA_JUNIOR": "CHIRA JUNIOR",
     # Nigma Galaxy
     "OmaR": "Omar",
+    # Capitalization fixes: OpenDota uses different casing than datdota
+    # Verified against datdota.com/players/performances page
+    "Elmisho": "elmisho",
+    "fy": "Fy",
+    "nefrit": "Nefrit",
+    "sanctity-": "Sanctity-",
 }
 
 # Mapping from display team name (config key) to Liquipedia page name.
