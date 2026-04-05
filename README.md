@@ -2,7 +2,7 @@
 
 Automatically updates a Google Sheet with Dota 2 team rosters by combining data from:
 - **[cyberscore.live](https://cyberscore.live/en/)** — Current team rosters and player roles
-- **[datdota.com](https://datdota.com/)** — Player name conventions (verified via [OpenDota API](https://api.opendota.com/))
+- **[datdota.com](https://datdota.com/)** — Player name conventions
 
 ## Features
 
