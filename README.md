@@ -81,7 +81,7 @@ python main.py --update-sheet --teams Falcons Tundra
 
 Player names are resolved in this order:
 1. **Manual overrides** — `DATDOTA_NAME_OVERRIDES` in `config.py`
-2. **OpenDota verification** — Cross-checked against the OpenDota pro players API
+2. **DatDota verification** — Cross-checked against the DatDota API
 3. **Cyberscore name** — Used as-is (usually matches datdota)
 
 If a name differs between cyberscore and datdota, add it to `DATDOTA_NAME_OVERRIDES`:
